@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# Caminhos e nomes
+SCRIPT_PATH="/usr/local/bin/update-issue.sh"
+SERVICE_PATH="/etc/systemd/system/update-issue.service"
+
+# 1. Criar o script de atualização do /etc/issue
+echo "Criando o script de atualização do /etc/issue..."
+cat << 'EOF' > $SCRIPT_PATH
+#!/bin/bash
+
+# Definindo a cor vermelha para o texto
+RED='\033[0;31m'
+NC='\033[0m' # Sem cor
+
+# Obtendo o IP do servidor (primeira interface ativa)
+IP=$(hostname -I | awk '{print $1}')
+# Obtendo a quantidade de memória instalada (em GB)
+MEMORY=$(free -g | awk '/^Mem:/ {print $2}')
+# Obtendo o tamanho total do disco (em GB)
+DISK=$(df -h / | awk 'NR==2 {print $2}')
+# Obtendo o espaço livre em disco (em GB)
+DISK_FREE=$(df -h / | awk 'NR==2 {print $4}')
+# Obtendo o modelo do processador
+CPU=$(lscpu | grep 'Model name' | head -1 | awk -F ':' '{print $2}' | sed 's/^ *//')
+
+# Limpando o arquivo /etc/issue
+> /etc/issue
+
+# Escrevendo no /etc/issue
+echo -e "${RED}SERVIDOR DE BANCO DE DADOS${NC}\n" >> /etc/issue
+echo "#############################################################" >> /etc/issue
+echo -e "Processador: $CPU\n" >> /etc/issue
+echo -e "Memória RAM: ${MEMORY}GB\n" >> /etc/issue
+echo -e "Tamanho do Disco: $DISK\n" >> /etc/issue
+echo -e "Espaço Livre em Disco: $DISK_FREE\n" >> /etc/issue
+echo >> /etc/issue
+echo "#############################################################" >> /etc/issue
+echo "Para acessar este servidor, utilize um navegador web" >> /etc/issue
+echo "Acesse o endereço abaixo:" >> /etc/issue
+echo "https://$IP:8006" >> /etc/issue
+echo "Passe essa informação somente para pessoal autorizado" >> /etc/issue
+echo >> /etc/issue
+EOF
+
+# Tornar o script executável
+chmod +x $SCRIPT_PATH
+echo "Script criado e permissões aplicadas: $SCRIPT_PATH"
+
+# 2. Criar o serviço systemd
+echo "Criando o serviço systemd para o script..."
+cat << EOF > $SERVICE_PATH
+[Unit]
+Description=Atualizar conteúdo do /etc/issue
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=$SCRIPT_PATH
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Recarregar o systemd e habilitar o serviço
+systemctl daemon-reload
+systemctl enable update-issue.service
+echo "Serviço criado e habilitado: update-issue.service"
+
+# 3. Testar o serviço
+echo "Executando o serviço para testar..."
+systemctl start update-issue.service
+
+# Exibir o conteúdo atualizado do /etc/issue
+echo "Conteúdo atualizado do /etc/issue:"
+cat /etc/issue
+
+echo "Setup concluído! O script será executado automaticamente na inicialização."
